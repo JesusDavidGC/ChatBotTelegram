@@ -1,0 +1,184 @@
+var token = "6878941758:AAFsV5jcNS5rfe8NIeWAYN_Hkkg79kKbo4M";
+var folderId = '1jqGbuDm00gT_HKsLkXGmJPYnENr_kemL';
+
+function setWebhook() {
+  var webAppUrl = 'https://script.google.com/macros/s/AKfycbwIfHX8aVGIpJSIIFB89oY_WqmUKJzBwNrpdIQlQNw3Kjbi3LQMglAqcO0RWWXK8aa_6A/exec';
+  var response = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${webAppUrl}`);
+  Logger.log(response);
+}
+
+function sendText(chatId, text) {
+  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "post",
+    payload: {
+      chat_id: String(chatId),
+      text: text,
+      parse_mode: "HTML"
+    }
+  });
+}
+
+function findUserRow(sheet, column, value) {
+  var data = sheet.getRange(2, column, sheet.getLastRow() - 1, 1).getValues().flat().map(String);
+  var index = data.indexOf(String(value));
+  return index !== -1 ? index + 2 : -1;
+}
+
+function validateUser(userId, rfc) {
+  var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
+  var userRow = findUserRow(sheet, 1, userId);
+  if (userRow !== -1) {
+    return sheet.getRange(userRow, 5).getValue() === rfc;
+  }
+  return false;
+}
+
+function doPost(e) {
+  var contents = JSON.parse(e.postData.contents);
+  if (contents.callback_query) return handleCallbackAction(contents.callback_query);
+
+  var chatId = contents.message.chat.id;
+  var messageText = contents.message.text;
+  var id_message = contents.message.from.id;
+  var firstName = contents.message.from.first_name;
+  var username = contents.message.from.username;
+
+  var sessionState = PropertiesService.getScriptProperties().getProperty('sessionState_' + chatId);
+
+  if (messageText === '/start') {
+    startSession(chatId);
+  } else if (sessionState === 'awaiting_user_id') {
+    handleUserId(chatId, messageText);
+  } else if (sessionState === 'awaiting_password') {
+    handlePassword(chatId, messageText);
+  } else if (sessionState === 'awaiting_rfc') {
+    handleRFC(chatId, messageText, id_message, firstName, username);
+  } else {
+    sendText(chatId, "Para empezar, por favor utiliza el comando /start.");
+  }
+}
+
+function startSession(chatId) {
+  sendText(chatId, "Hola!! 👋👋.\nPor favor ingresa tu ID de usuario ✍️✍️");
+  PropertiesService.getScriptProperties().setProperty('sessionState_' + chatId, 'awaiting_user_id');
+}
+
+function handleUserId(chatId, userId) {
+  var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
+  var userRow = findUserRow(sheet, 1, userId);
+
+  if (userRow !== -1) {
+    var existingChatId = sheet.getRange(userRow, 7).getValue();
+    if (existingChatId && existingChatId != chatId) {
+      sendText(chatId, "❌ ❌ Este ID ya está asociado a otro usuario de Telegram. No puedes usarlo.");
+    } else if (sheet.getRange(userRow, 6).getValue() === "Activo") {
+      PropertiesService.getScriptProperties().setProperty('currentUserId_' + chatId, userId);
+      PropertiesService.getScriptProperties().setProperty('expectedPassword_' + chatId, sheet.getRange(userRow, 3).getValue());
+      sendText(chatId, "Por favor ingresa tu contraseña ✍️✍️.");
+      PropertiesService.getScriptProperties().setProperty('sessionState_' + chatId, 'awaiting_password');
+    } else {
+      sendText(chatId, "❌ ❌ Tu cuenta está inactiva. Por favor contacta al administrador para más información.");
+    }
+  } else {
+    sendText(chatId, "❌ ❌ El ID proporcionado no existe en nuestra base de datos. Por favor, regístrate primero.");
+  }
+}
+
+function handlePassword(chatId, password) {
+  var expectedPassword = PropertiesService.getScriptProperties().getProperty('expectedPassword_' + chatId);
+  if (password === expectedPassword) {
+    sendText(chatId, "Contraseña validada correctamente ✅✅.\nPor favor ingresa tu RFC ✍️✍️.");
+    PropertiesService.getScriptProperties().setProperty('sessionState_' + chatId, 'awaiting_rfc');
+  } else {
+    sendText(chatId, "❌ ❌ La contraseña proporcionada es incorrecta. Por favor, inténtalo nuevamente.");
+  }
+}
+
+function handleRFC(chatId, rfc, id_message, firstName, username) {
+  var currentUserId = PropertiesService.getScriptProperties().getProperty('currentUserId_' + chatId);
+  if (validateUser(currentUserId, rfc)) {
+    var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
+    var userRow = findUserRow(sheet, 1, currentUserId);
+
+    sheet.getRange(userRow, 7).setValue(id_message);
+    sheet.getRange(userRow, 8).setValue(firstName);
+    sheet.getRange(userRow, 9).setValue(username);
+
+    sendText(chatId, "RFC validado correctamente ✅.\nBienvenido al menú principal 👋👋.");
+    sendMainMenu(chatId);
+    PropertiesService.getScriptProperties().deleteAllProperties();
+  } else {
+    sendText(chatId, "❌ ❌ El RFC proporcionado no coincide con el registrado para este usuario. Por favor, inténtalo nuevamente.");
+  }
+}
+
+function sendMainMenu(chatId) {
+  var keyboard = {
+    inline_keyboard: [
+      [{ text: "➡️ Buscar y descargar último reporte", callback_data: "option1" }],
+      [{ text: "➡️ Opción 2", callback_data: "option2" }],
+      [{ text: "➡️ Opción 3", callback_data: "option3" }]
+    ]
+  };
+
+  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "post",
+    payload: {
+      chat_id: String(chatId),
+      text: "Por favor selecciona una opción:",
+      parse_mode: "HTML",
+      reply_markup: JSON.stringify(keyboard)
+    }
+  });
+}
+
+function handleCallbackAction(callbackQuery) {
+  var chatId = callbackQuery.message.chat.id;
+  var callbackData = callbackQuery.data;
+
+  var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
+  var telegramUserRow = findUserRow(sheet, 7, chatId);
+
+  if (telegramUserRow !== -1 && sheet.getRange(telegramUserRow, 6).getValue() === "Activo") {
+    if (callbackData === 'option1') {
+      sendText(chatId, "🔍 Opción de buscar y descargar último reporte seleccionada\nDescargando archivo.... 📥📥📥");
+      searchAndSendLatestFile(chatId, sheet.getRange(telegramUserRow, 1).getValue());
+    } else {
+      sendText(chatId, `${callbackData === 'option2' ? '2️⃣ Opción 2' : '3️⃣ Opción 3'} seleccionada.`);
+    }
+  } else {
+    sendText(chatId, "❌ Tu cuenta está inactiva. Por favor contacta al administrador para más información.");
+  }
+
+  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery?callback_query_id=${callbackQuery.id}`);
+}
+
+function searchAndSendLatestFile(chatId, userId) {
+  var files = DriveApp.getFolderById(folderId).searchFiles(`title contains "${userId}"`);
+  var latestFile = null;
+  while (files.hasNext()) {
+    var file = files.next();
+    if (!latestFile || file.getLastUpdated() > latestFile.getLastUpdated()) {
+      latestFile = file;
+    }
+  }
+
+  if (latestFile) {
+    sendDocument(chatId, latestFile.getBlob());
+  } else {
+    sendText(chatId, "No se encontraron archivos que contengan el ID de usuario en la primera columna en la carpeta especificada ❌❌.");
+  }
+
+  sendMainMenu(chatId);
+}
+
+function sendDocument(chatId, fileBlob) {
+  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+    method: "post",
+    payload: {
+      chat_id: String(chatId),
+      caption: "Aquí está el archivo solicitado ✅✅.",
+      document: fileBlob
+    }
+  });
+}
