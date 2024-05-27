@@ -80,7 +80,7 @@ function handleUserId(chatId, userId) {
       sendText(chatId, "❌ ❌ Tu cuenta está inactiva. Por favor contacta al administrador para más información.");
     }
   } else {
-    sendText(chatId, "❌ ❌ El ID proporcionado no existe en nuestra base de datos. Por favor, regístrate primero.");
+    sendText(chatId, "❌ ❌ El ID proporcionado no existe. Por favor, regístrate primero.");
   }
 }
 
@@ -115,7 +115,7 @@ function handleRFC(chatId, rfc, id_message, firstName, username) {
 function sendMainMenu(chatId) {
   var keyboard = {
     inline_keyboard: [
-      [{ text: "➡️ Buscar y descargar último reporte", callback_data: "option1" }],
+      [{ text: "➡️ Descargar el último reporte", callback_data: "option1" }],
       [{ text: "➡️ Opción 2", callback_data: "option2" }],
       [{ text: "➡️ Opción 3", callback_data: "option3" }]
     ]
@@ -141,7 +141,7 @@ function handleCallbackAction(callbackQuery) {
 
   if (telegramUserRow !== -1 && sheet.getRange(telegramUserRow, 6).getValue() === "Activo") {
     if (callbackData === 'option1') {
-      sendText(chatId, "🔍 Opción de buscar y descargar último reporte seleccionada\nDescargando archivo.... 📥📥📥");
+      sendText(chatId, "🔍 Opción eligida: Descargar el último reporte.\nDescargando archivo.... 📥📥📥");
       searchAndSendLatestFile(chatId, sheet.getRange(telegramUserRow, 1).getValue());
     } else {
       sendText(chatId, `${callbackData === 'option2' ? '2️⃣ Opción 2' : '3️⃣ Opción 3'} seleccionada.`);
@@ -166,7 +166,7 @@ function searchAndSendLatestFile(chatId, userId) {
   if (latestFile) {
     sendDocument(chatId, latestFile.getBlob());
   } else {
-    sendText(chatId, "No se encontraron archivos que contengan el ID de usuario en la primera columna en la carpeta especificada ❌❌.");
+    sendText(chatId, "No se encontraron archivos asociados a tu usuario ❌❌.");
   }
 
   sendMainMenu(chatId);
@@ -177,7 +177,7 @@ function sendDocument(chatId, fileBlob) {
     method: "post",
     payload: {
       chat_id: String(chatId),
-      caption: "Aquí está el archivo solicitado ✅✅.",
+      caption: "Aquí está el último reporte ✅✅.",
       document: fileBlob
     }
   });
