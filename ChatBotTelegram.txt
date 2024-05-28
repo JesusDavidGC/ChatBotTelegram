@@ -2,7 +2,7 @@ var token = "6878941758:AAFsV5jcNS5rfe8NIeWAYN_Hkkg79kKbo4M";
 var folderId = '1jqGbuDm00gT_HKsLkXGmJPYnENr_kemL';
 
 function setWebhook() {
-  var webAppUrl = 'https://script.google.com/macros/s/AKfycbwIfHX8aVGIpJSIIFB89oY_WqmUKJzBwNrpdIQlQNw3Kjbi3LQMglAqcO0RWWXK8aa_6A/exec';
+  var webAppUrl = 'https://script.google.com/macros/s/AKfycbytj9-N9UCQcHPDo0YdGkVmLM4DTmpntjlRNr65Fck_2G8fmAsm5vAbPlFWpP1lEUQtDg/exec';
   var response = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${webAppUrl}`);
   Logger.log(response);
 }
@@ -48,7 +48,7 @@ function doPost(e) {
   if (messageText === '/start') {
     startSession(chatId);
   } else if (sessionState === 'awaiting_user_id') {
-    handleUserId(chatId, messageText);
+    handleUserId(chatId, messageText, id_message);
   } else if (sessionState === 'awaiting_password') {
     handlePassword(chatId, messageText);
   } else if (sessionState === 'awaiting_rfc') {
@@ -63,8 +63,19 @@ function startSession(chatId) {
   PropertiesService.getScriptProperties().setProperty('sessionState_' + chatId, 'awaiting_user_id');
 }
 
-function handleUserId(chatId, userId) {
+function handleUserId(chatId, userId, id_message) {
   var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
+  
+  // Check if this Telegram user is already associated with another userId
+  var telegramUserRow = findUserRow(sheet, 7, id_message);
+  if (telegramUserRow !== -1) {
+    var associatedUserId = sheet.getRange(telegramUserRow, 1).getValue();
+    if (String(associatedUserId) !== String(userId)) {
+      sendText(chatId, "❌ ❌ Ya tienes una cuenta asociada a este Telegram. No puedes usar otro ID de usuario.");
+      return;
+    }
+  }
+
   var userRow = findUserRow(sheet, 1, userId);
 
   if (userRow !== -1) {
