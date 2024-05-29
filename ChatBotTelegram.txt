@@ -2,7 +2,7 @@ var token = "6878941758:AAFsV5jcNS5rfe8NIeWAYN_Hkkg79kKbo4M";
 var folderId = '1jqGbuDm00gT_HKsLkXGmJPYnENr_kemL';
 
 function setWebhook() {
-  var webAppUrl = 'https://script.google.com/macros/s/AKfycbytj9-N9UCQcHPDo0YdGkVmLM4DTmpntjlRNr65Fck_2G8fmAsm5vAbPlFWpP1lEUQtDg/exec';
+  var webAppUrl = 'https://script.google.com/macros/s/AKfycbwJ6JkfBtsm0g79hSDaHBXODxmZLfvU9YrctdtuHaSgMLmZufSSofbJuj23rgVe5yVjYA/exec';
   var response = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${webAppUrl}`);
   Logger.log(response);
 }
@@ -66,7 +66,6 @@ function startSession(chatId) {
 function handleUserId(chatId, userId, id_message) {
   var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
   
-  // Check if this Telegram user is already associated with another userId
   var telegramUserRow = findUserRow(sheet, 7, id_message);
   if (telegramUserRow !== -1) {
     var associatedUserId = sheet.getRange(telegramUserRow, 1).getValue();
@@ -127,8 +126,7 @@ function sendMainMenu(chatId) {
   var keyboard = {
     inline_keyboard: [
       [{ text: "➡️ Descargar el último reporte", callback_data: "option1" }],
-      [{ text: "➡️ Opción 2", callback_data: "option2" }],
-      [{ text: "➡️ Opción 3", callback_data: "option3" }]
+      [{ text: "➡️ Descargar reporte en Google Sheets", callback_data: "option2" }]
     ]
   };
 
@@ -154,8 +152,9 @@ function handleCallbackAction(callbackQuery) {
     if (callbackData === 'option1') {
       sendText(chatId, "🔍 Opción eligida: Descargar el último reporte.\nDescargando archivo.... 📥📥📥");
       searchAndSendLatestFile(chatId, sheet.getRange(telegramUserRow, 1).getValue());
-    } else {
-      sendText(chatId, `${callbackData === 'option2' ? '2️⃣ Opción 2' : '3️⃣ Opción 3'} seleccionada.`);
+    } else if (callbackData === 'option2') {
+      sendText(chatId, "🔍 Opción eligida: Descargar reporte en Google Sheets.\nObteniendo enlace.... 📥📥📥");
+      sendSheetLink(chatId, sheet.getRange(telegramUserRow, 1).getValue());
     }
   } else {
     sendText(chatId, "❌ Tu cuenta está inactiva. Por favor contacta al administrador para más información.");
@@ -192,4 +191,23 @@ function sendDocument(chatId, fileBlob) {
       document: fileBlob
     }
   });
+}
+
+function sendSheetLink(chatId, userId) {
+  var files = DriveApp.getFolderById(folderId).searchFiles(`title contains "${userId}"`);
+  var latestFile = null;
+  while (files.hasNext()) {
+    var file = files.next();
+    if (!latestFile || file.getLastUpdated() > latestFile.getLastUpdated()) {
+      latestFile = file;
+    }
+  }
+
+  if (latestFile) {
+    sendText(chatId, `Aquí está el enlace a tu Google Sheet: ${latestFile.getUrl()} ✅✅.`);
+  } else {
+    sendText(chatId, "No se encontraron archivos asociados a tu usuario ❌❌.");
+  }
+
+  sendMainMenu(chatId);
 }
