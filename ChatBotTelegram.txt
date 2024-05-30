@@ -2,7 +2,7 @@ var token = "6878941758:AAFsV5jcNS5rfe8NIeWAYN_Hkkg79kKbo4M";
 var folderId = '1jqGbuDm00gT_HKsLkXGmJPYnENr_kemL';
 
 function setWebhook() {
-  var webAppUrl = 'https://script.google.com/macros/s/AKfycbwJ6JkfBtsm0g79hSDaHBXODxmZLfvU9YrctdtuHaSgMLmZufSSofbJuj23rgVe5yVjYA/exec';
+  var webAppUrl = 'https://script.google.com/macros/s/AKfycby8V1oZmJ1v3nUNJOmkETrYYezH-u_l1S1Vq3S3_kLKusAu0YjIilkIwFE8OWbyZP7lbg/exec';
   var response = UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${webAppUrl}`);
   Logger.log(response);
 }
@@ -65,7 +65,7 @@ function startSession(chatId) {
 
 function handleUserId(chatId, userId, id_message) {
   var sheet = SpreadsheetApp.openById("1yrtD9G8y3baoXoKFttOcCBe_BJ9t40VAKuwcVc0Cvy0").getSheetByName("Usuarios");
-  
+
   var telegramUserRow = findUserRow(sheet, 7, id_message);
   if (telegramUserRow !== -1) {
     var associatedUserId = sheet.getRange(telegramUserRow, 1).getValue();
@@ -125,8 +125,8 @@ function handleRFC(chatId, rfc, id_message, firstName, username) {
 function sendMainMenu(chatId) {
   var keyboard = {
     inline_keyboard: [
-      [{ text: "➡️ Descargar el último reporte", callback_data: "option1" }],
-      [{ text: "➡️ Descargar reporte en Google Sheets", callback_data: "option2" }]
+      [{ text: "📄 Descargar el último reporte como PDF", callback_data: "option1" }],
+      [{ text: "📊 Descargar el último reporte como Excel", callback_data: "option2" }]
     ]
   };
 
@@ -150,11 +150,11 @@ function handleCallbackAction(callbackQuery) {
 
   if (telegramUserRow !== -1 && sheet.getRange(telegramUserRow, 6).getValue() === "Activo") {
     if (callbackData === 'option1') {
-      sendText(chatId, "🔍 Opción eligida: Descargar el último reporte.\nDescargando archivo.... 📥📥📥");
-      searchAndSendLatestFile(chatId, sheet.getRange(telegramUserRow, 1).getValue());
+      sendText(chatId, "🔍 Opción elegida: Descargar el último reporte en PDF.\nDescargando archivo.... 📥📥📥");
+      searchAndSendLatestPDF(chatId, sheet.getRange(telegramUserRow, 1).getValue());
     } else if (callbackData === 'option2') {
-      sendText(chatId, "🔍 Opción eligida: Descargar reporte en Google Sheets.\nObteniendo enlace.... 📥📥📥");
-      sendSheetLink(chatId, sheet.getRange(telegramUserRow, 1).getValue());
+      sendText(chatId, "🔍 Opción elegida: Descargar el último reporte en Excel.\nDescargando archivo.... 📥📥📥");
+      searchAndSendSheetFile(chatId, sheet.getRange(telegramUserRow, 1).getValue());
     }
   } else {
     sendText(chatId, "❌ Tu cuenta está inactiva. Por favor contacta al administrador para más información.");
@@ -163,7 +163,7 @@ function handleCallbackAction(callbackQuery) {
   UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery?callback_query_id=${callbackQuery.id}`);
 }
 
-function searchAndSendLatestFile(chatId, userId) {
+function searchAndSendLatestPDF(chatId, userId) {
   var files = DriveApp.getFolderById(folderId).searchFiles(`title contains "${userId}"`);
   var latestFile = null;
   while (files.hasNext()) {
@@ -174,7 +174,8 @@ function searchAndSendLatestFile(chatId, userId) {
   }
 
   if (latestFile) {
-    sendDocument(chatId, latestFile.getBlob());
+    var pdfBlob = convertToPDF(latestFile);
+    sendDocument(chatId, pdfBlob, latestFile.getName().replace(/\.[^/.]+$/, ".pdf"));
   } else {
     sendText(chatId, "No se encontraron archivos asociados a tu usuario ❌❌.");
   }
@@ -182,18 +183,33 @@ function searchAndSendLatestFile(chatId, userId) {
   sendMainMenu(chatId);
 }
 
-function sendDocument(chatId, fileBlob) {
-  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+function convertToPDF(file) {
+  var fileId = file.getId();
+  var url = 'https://docs.google.com/spreadsheets/d/' + fileId + '/export?format=pdf';
+
+  var response = UrlFetchApp.fetch(url, {
+    headers: {
+      'Authorization': 'Bearer ' + ScriptApp.getOAuthToken()
+    }
+  });
+
+  return response.getBlob().setName(file.getName().replace(/\.[^/.]+$/, ".pdf"));
+}
+
+function sendDocument(chatId, fileBlob, fileName) {
+  var formData = {
     method: "post",
     payload: {
       chat_id: String(chatId),
-      caption: "Aquí está el último reporte ✅✅.",
-      document: fileBlob
+      caption: "Aquí está el último reporte en PDF ✅✅.",
+      document: fileBlob,
+      filename: fileName
     }
-  });
+  };
+  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendDocument`, formData);
 }
 
-function sendSheetLink(chatId, userId) {
+function searchAndSendSheetFile(chatId, userId) {
   var files = DriveApp.getFolderById(folderId).searchFiles(`title contains "${userId}"`);
   var latestFile = null;
   while (files.hasNext()) {
@@ -204,10 +220,23 @@ function sendSheetLink(chatId, userId) {
   }
 
   if (latestFile) {
-    sendText(chatId, `Aquí está el enlace a tu Google Sheet: ${latestFile.getUrl()} ✅✅.`);
+    sendSheetFile(chatId, latestFile);
   } else {
     sendText(chatId, "No se encontraron archivos asociados a tu usuario ❌❌.");
   }
 
   sendMainMenu(chatId);
+}
+
+function sendSheetFile(chatId, file) {
+  var url = `https://drive.google.com/open?id=${file.getId()}`;
+
+  UrlFetchApp.fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "post",
+    payload: {
+      chat_id: String(chatId),
+      text: "Aquí esta el último reporte de Excel ✅✅.\n[Descargar archivo](" + url + ")",
+      parse_mode: "Markdown"
+    }
+  });
 }
